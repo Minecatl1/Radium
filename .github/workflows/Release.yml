@@ -114,7 +114,7 @@ jobs:
             --owner=0 \
             --group=0 \
             --numeric-owner \
-            -cJf "$PACKAGE_NAME" \
+            -cJvf "$PACKAGE_NAME" \
             -C build/package .
 
           echo "Created $PACKAGE_NAME"
