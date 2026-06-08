@@ -77,6 +77,32 @@ jobs:
           rm client.zip
           echo "Extraction complete"
 
+      - name: Create Linux launcher script
+        shell: bash
+        run: |
+          cd build/package
+
+          # Locate the screen mode batch file
+          BATPATH=$(find . -name "RecRoom_ScreenMode.bat" -print -quit)
+          if [ -z "$BATPATH" ]; then
+            echo "Error: RecRoom_ScreenMode.bat not found!"
+            exit 1
+          fi
+
+          # Move into the batch file's directory
+          BATCH_DIR=$(dirname "$BATPATH")
+          cd "$BATCH_DIR"
+
+          # Create the launcher script
+          cat > run_radium.sh << 'EOF'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          wine cmd /c "./RecRoom_ScreenMode.bat"
+          EOF
+
+          chmod +x run_radium.sh
+          echo "Created run_radium.sh in $(pwd)"
+
       - name: Create tar.xz Package
         shell: bash
         run: |
