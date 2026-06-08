@@ -1,0 +1,111 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Repository Name
+        id: repo
+        shell: bash
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          echo "name=$REPO_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Determine Release Tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          else
+            TAG="build-$(date -u +'%Y%m%d-%H%M%S')"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create Staging Directory
+        shell: bash
+        run: |
+          mkdir -p build/package
+
+      - name: Download and Extract Radium Client
+        shell: bash
+        run: |
+          cd build/package
+          
+          echo "Downloading radium client..."
+          wget -q "https://cdn.recroomarchive.org/radium/game-client/production/toukeh24kq6w2v4lndyc4z0pblvfyj75/windows/client.zip" -O client.zip
+          
+          if [ ! -f client.zip ]; then
+            echo "Failed to download client.zip"
+            exit 1
+          fi
+          
+          echo "Extracting client.zip..."
+          unzip -q client.zip
+          
+          if [ $? -ne 0 ]; then
+            echo "Failed to extract client.zip"
+            exit 1
+          fi
+          
+          rm client.zip
+          echo "Extraction complete"
+
+      - name: Create tar.xz Package
+        shell: bash
+        run: |
+          PACKAGE_NAME="${{ steps.repo.outputs.name }}.tar.xz"
+
+          tar \
+            --sort=name \
+            --mtime='UTC 2025-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -cJf "$PACKAGE_NAME" \
+            -C build/package .
+
+          echo "Created $PACKAGE_NAME"
+
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          sha256sum \
+            "${{ steps.repo.outputs.name }}.tar.xz" \
+            > "${{ steps.repo.outputs.name }}.tar.xz.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.repo.outputs.name }} ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.repo.outputs.name }}.tar.xz
+            ${{ steps.repo.outputs.name }}.tar.xz.sha256
