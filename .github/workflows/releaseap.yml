@@ -1,10 +1,6 @@
 name: Build and Release with compile
 
 on:
-  push:
-    branches:
-      - main
-
   workflow_dispatch:
     inputs:
       release_tag:
