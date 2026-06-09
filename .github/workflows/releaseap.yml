@@ -1,0 +1,198 @@
+name: Build and Release with compile
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Repository Name
+        id: repo
+        shell: bash
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          echo "name=$REPO_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Determine Release Tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          else
+            TAG="build-$(date -u +'%Y%m%d-%H%M%S')"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create Staging Directory
+        shell: bash
+        run: |
+          mkdir -p build/package
+
+      - name: Download and Extract Radium Client
+        shell: bash
+        run: |
+          cd build/package
+          
+          echo "Downloading radium client..."
+          wget -q "https://cdn.recroomarchive.org/radium/game-client/production/toukeh24kq6w2v4lndyc4z0pblvfyj75/windows/client.zip" -O client.zip
+          
+          if [ ! -f client.zip ]; then
+            echo "Failed to download client.zip"
+            exit 1
+          fi
+          
+          echo "Extracting client.zip..."
+          unzip -q client.zip
+          
+          if [ $? -ne 0 ]; then
+            echo "Failed to extract client.zip"
+            exit 1
+          fi
+          
+          rm client.zip
+          echo "Extraction complete"
+
+      - name: Install Official Wine Stable (Ubuntu 24.04) & Xvfb
+        run: |
+          # 1. Prepare system directories and keys using elevated permissions
+          sudo mkdir -pm755 /etc/apt/keyrings
+          wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
+          
+          # 2. Add 32-bit architecture and WineHQ repository sources
+          sudo dpkg --add-architecture i386
+          sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
+          
+          # 3. Update apt packages and install Wine Stable alongside headless display engine
+          sudo apt-get update
+          sudo apt-get install -y --install-recommends winehq-stable xvfb
+
+      - name: Create Linux launcher script
+        shell: bash
+        run: |
+          cd build/package
+
+          # Locate the screen mode batch file
+          BATPATH=$(find . -name "RecRoom_ScreenMode.bat" -print -quit)
+          if [ -z "$BATPATH" ]; then
+            echo "Error: RecRoom_ScreenMode.bat not found!"
+            exit 1
+          fi
+
+          # Move into the batch file's directory
+          BATCH_DIR=$(dirname "$BATPATH")
+          cd "$BATCH_DIR"
+
+          # Create the launcher script
+          cat > run_radium.sh << 'EOF'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          wine cmd /c "./RecRoom_ScreenMode.bat"
+          EOF
+
+          chmod +x run_radium.sh
+          echo "Created run_radium.sh in $(pwd)"
+
+      - name: Pre-Compile IL2CPP Game Cache on the Runner
+        shell: bash
+        run: |
+          cd build/package
+          
+          # Find the exact directory holding RecRoom.exe dynamically
+          EXEPATH=$(find . -name "RecRoom.exe" -print -quit)
+          if [ -z "$EXEPATH" ]; then
+            echo "Error: RecRoom.exe not found in build directory!"
+            exit 1
+          fi
+          
+          GAME_DIR=$(dirname "$EXEPATH")
+          cd "$GAME_DIR"
+          
+          echo "Working directory for compilation: $(pwd)"
+          
+          # Enforce BepInEx low-RAM configuration adjustments directly inside your staging pack
+          mkdir -p BepInEx/config
+          echo -e "[Logging.Console]\nEnabled = false\n\n[Caching]\nEnableCaching = true\nMaxWorkerThreads = 2" > BepInEx/config/BepInEx.cfg
+          
+          # Spin up Wine inside an invisible virtual display layer to kickstart the cache extractor
+          WINEDLLOVERRIDES="winhttp=n,b;coreclr=n,b;hostfxr=n,b;hostpolicy=n,b" xvfb-run wine RecRoom.exe -screen-mode windowed --bepinexdisableconsole &
+          
+          echo "Waiting for the GitHub Action runner to process the unstripping metadata..."
+          
+          # Loop checking for up to 90 seconds until unity-libs appears and file initialization holds steady
+          for i in {1..9}; do
+            sleep 10
+            if [ -d "BepInEx/unity-libs" ]; then
+              echo "Extracting... unity-libs folder detected."
+            fi
+          done
+          
+          # Gracefully kill the background headless window instances 
+          pkill -f RecRoom || true
+          pkill -f wine || true
+          
+          # Safety check verification: Ensure compilation did not fail
+          if [ -d "BepInEx/unity-libs" ]; then
+            echo "SUCCESS: BepInEx IL2CPP libraries successfully pre-compiled for Linux deployment!"
+          else
+            echo "ERROR: Compilation phase dropped completely. Reviewing ErrorLog.log..."
+            cat BepInEx/ErrorLog.log || true
+            exit 1
+          fi
+
+      - name: Create tar.xz Package
+        shell: bash
+        run: |
+          PACKAGE_NAME="${{ steps.repo.outputs.name }}.tar.xz"
+
+          tar \
+            --sort=name \
+            --mtime='UTC 2025-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -cJvf "$PACKAGE_NAME" \
+            -C build/package .
+
+          echo "Created $PACKAGE_NAME"
+
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          sha256sum \
+            "${{ steps.repo.outputs.name }}.tar.xz" \
+            > "${{ steps.repo.outputs.name }}.tar.xz.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.repo.outputs.name }} ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.repo.outputs.name }}.tar.xz
+            ${{ steps.repo.outputs.name }}.tar.xz.sha256
