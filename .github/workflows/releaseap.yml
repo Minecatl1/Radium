@@ -134,11 +134,18 @@ jobs:
           
           echo "Working directory for compilation: $(pwd)"
           
-          # Enforce BepInEx low-RAM configuration adjustments directly inside your staging pack
+          # 1. Force Wine to initialize its default ~/.wine prefix headlessly and wait for it to complete
+          echo "Initializing headless Wine configuration prefix..."
+          xvfb-run wineboot --init
+          
+          # Give Wine a few seconds to finish writing core registry configs to disk
+          sleep 10
+          
+          # 2. Enforce BepInEx low-RAM configuration adjustments directly inside your staging pack
           mkdir -p BepInEx/config
           echo -e "[Logging.Console]\nEnabled = false\n\n[Caching]\nEnableCaching = true\nMaxWorkerThreads = 2" > BepInEx/config/BepInEx.cfg
           
-          # Spin up Wine inside an invisible virtual display layer to kickstart the cache extractor
+          # 3. Spin up Wine inside an invisible virtual display layer to kickstart the cache extractor
           WINEDLLOVERRIDES="winhttp=n,b;coreclr=n,b;hostfxr=n,b;hostpolicy=n,b" xvfb-run wine RecRoom.exe -screen-mode windowed --bepinexdisableconsole &
           
           echo "Waiting for the GitHub Action runner to process the unstripping metadata..."
@@ -163,6 +170,7 @@ jobs:
             cat BepInEx/ErrorLog.log || true
             exit 1
           fi
+
 
       - name: Create tar.xz Package
         shell: bash
