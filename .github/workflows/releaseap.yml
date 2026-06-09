@@ -75,17 +75,12 @@ jobs:
 
       - name: Install Official Wine Stable (Ubuntu 24.04) & Xvfb
         run: |
-          # 1. Prepare system directories and keys using elevated permissions
           sudo mkdir -pm755 /etc/apt/keyrings
           wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
-          
-          # 2. Add 32-bit architecture and WineHQ repository sources
           sudo dpkg --add-architecture i386
           sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
-          
-          # 3. Update apt packages and install Wine Stable alongside headless display engine
           sudo apt-get update
-          sudo apt-get install -y --install-recommends winehq-stable xvfb x11vnc fluxbox
+          sudo apt-get install -y --install-recommends winehq-stable xvfb   # no x11vnc, no fluxbox
 
       - name: Create Linux launcher script
         shell: bash
@@ -112,28 +107,19 @@ jobs:
 
           chmod +x run_radium.sh
           echo "Created run_radium.sh in $(pwd)"
-      - name: Configure Headless Virtual Display canvas & Local VNC Network
+      - name: Pre-install Wine Mono (no GUI prompt)
         shell: bash
         run: |
-          # 1. Start Xvfb virtual frame buffer on display channel :99
-          Xvfb :99 -screen 0 1280x1024x24 &
-          echo "DISPLAY=:99" >> $GITHUB_ENV
-          sleep 3
-          
-          # 2. Launch fluxbox inside display channel :99 so windows have rendering frame structures
-          DISPLAY=:99 fluxbox &
-          sleep 2
-          
-          # 3. Bind the Xvfb virtual frame buffer channel to an unauthenticated local VNC port layout
-          DISPLAY=:99 x11vnc -nopw -listen localhost -bg -forever
-          echo "VNC mapping successfully bounded on display :99 over port 5900"
-      - name: Open Background Non-Blocking Interactive Terminal Bridge
-        uses: mxschmitt/action-tmate@v3
-        with:
-          detached: true # <--- FORCES FLOW TO IMMEDIATELY PROCEED WITHOUT STOPPING PAUSE
-          limit-access-to-actor: true
-
-      - name: Pre-Compile IL2CPP Game Cache on the Runner
+          # Make sure a clean Wine prefix exists
+          WINEPREFIX="$HOME/.wine" WINEARCH=win64 wine wineboot --init
+          # Download the latest Wine Mono MSI (always check dl.winehq.org for the newest URL)
+          MONO_URL="https://dl.winehq.org/wine/wine-mono/9.4.0/wine-mono-9.4.0-x86.msi"
+          wget -q "$MONO_URL" -O /tmp/wine-mono.msi
+          # Install silently with no UI
+          wine msiexec /i /tmp/wine-mono.msi /quiet /norestart
+          # Confirm installation
+          wine uninstaller --list | grep -i mono || echo "Mono installed successfully"
+      - name: Compile on Runner
         shell: bash
         run: |
           cd build/package
