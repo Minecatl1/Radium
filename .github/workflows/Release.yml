@@ -76,6 +76,20 @@ jobs:
           
           rm client.zip
           echo "Extraction complete"
+      - name: Install Official Wine Stable (Ubuntu 24.04) & Xvfb
+        run: |
+          # 1. Prepare system directories and keys
+          mkdir -pm755 /etc/apt/keyrings
+          wget -O - https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
+          
+          # 2. Add 32-bit architecture and WineHQ repository sources
+          dpkg --add-architecture i386
+          wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
+          
+          # 3. Update apt packages and install Wine Stable alongside headless display engine
+          apt-get update
+          apt-get install -y --install-recommends winehq-stable xvfb
+
 
       - name: Create Linux launcher script
         shell: bash
