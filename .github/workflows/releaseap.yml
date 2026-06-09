@@ -89,7 +89,7 @@ jobs:
           
           # 3. Update apt packages and install Wine Stable alongside headless display engine
           sudo apt-get update
-          sudo apt-get install -y --install-recommends winehq-stable xvfb
+          sudo apt-get install -y --install-recommends winehq-stable xvfb x11vnc fluxbox
 
       - name: Create Linux launcher script
         shell: bash
@@ -116,6 +116,26 @@ jobs:
 
           chmod +x run_radium.sh
           echo "Created run_radium.sh in $(pwd)"
+      - name: Configure Headless Virtual Display canvas & Local VNC Network
+        shell: bash
+        run: |
+          # 1. Start Xvfb virtual frame buffer on display channel :99
+          Xvfb :99 -screen 0 1280x1024x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 3
+          
+          # 2. Launch fluxbox inside display channel :99 so windows have rendering frame structures
+          DISPLAY=:99 fluxbox &
+          sleep 2
+          
+          # 3. Bind the Xvfb virtual frame buffer channel to an unauthenticated local VNC port layout
+          DISPLAY=:99 x11vnc -nopw -listen localhost -bg -forever
+          echo "VNC mapping successfully bounded on display :99 over port 5900"
+      - name: Open Background Non-Blocking Interactive Terminal Bridge
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true # <--- FORCES FLOW TO IMMEDIATELY PROCEED WITHOUT STOPPING PAUSE
+          limit-access-to-actor: true
 
       - name: Pre-Compile IL2CPP Game Cache on the Runner
         shell: bash
@@ -157,6 +177,8 @@ jobs:
               echo "Extracting... unity-libs folder detected."
             fi
           done
+
+          sleep 1400
           
           # Gracefully kill the background headless window instances 
           pkill -f RecRoom || true
