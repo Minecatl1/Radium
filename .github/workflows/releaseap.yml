@@ -52,7 +52,7 @@ jobs:
           sudo apt install curl
           curl -L -O https://github.com/Minecatl1/Radium/releases/download/patch/Patch.sh
           mv Patch.sh build/package/Patch.sh
-          chmod +x Patch.sh
+          chmod +x build/package/Patch.sh
 
       - name: Download and Extract Radium Client
         shell: bash
