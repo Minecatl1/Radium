@@ -48,6 +48,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/package
+          mv Patch.sh build/package/Patch.sh
+          chmod +x Patch.sh
 
       - name: Download and Extract Radium Client
         shell: bash
@@ -72,6 +74,8 @@ jobs:
           
           rm client.zip
           echo "Extraction complete"
+          echo "Patching"
+          bash Patch.sh
 
       - name: Install Official Wine Stable (Ubuntu 24.04) & Xvfb
         run: |
@@ -104,6 +108,8 @@ jobs:
           cd "$(dirname "$0")"
           wine cmd /c "./RecRoom_ScreenMode.bat"
           EOF
+
+          
 
           chmod +x run_radium.sh
           echo "Created run_radium.sh in $(pwd)"
