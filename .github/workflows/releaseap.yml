@@ -48,6 +48,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/package
+          ls --all
           mv Patch.sh build/package/Patch.sh
           chmod +x Patch.sh
 
