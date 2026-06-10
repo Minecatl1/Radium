@@ -111,9 +111,25 @@ jobs:
           cd "$(dirname "$0")"
           wine cmd /c "./RecRoom_ScreenMode.bat"
           EOF
-
+          cat > oldver.txt << 'EOF'
+          version=${{ steps.tag.outputs.tag }}
+          EOF
           
-
+          cat > update.sh << 'EOF'
+          #!/bin/bash
+          curl -L -O https://raw.githubusercontent.com/Minecatl1/Radium/refs/heads/main/newver.txt
+          NEWVER=$(grep "version=" newver.txt | cut -d'=' -f2)
+          OLDVER=$(grep "version=" oldver.txt | cut -d'=' -f2)
+          if [ "$OLDVER" = "$NEWVER" ]; then
+              echo "Versions are equal not updating."
+          else
+              echo "Versions are different updating."
+              find . -mindepth 1 ! -name "update.sh" -exec rm -rf {} +
+              curl -L -O https://github.com/Minecatl1/Radium/releases/download/$NEWVER/Radium.tar.xz
+              tar -xvf Radium.tar.xz
+              echo "Done!"
+          fi
+          EOF
           chmod +x run_radium.sh
           echo "Created run_radium.sh in $(pwd)"
       - name: Pre-install Wine Mono (no GUI prompt)
@@ -217,3 +233,19 @@ jobs:
           files: |
             ${{ steps.repo.outputs.name }}.tar.xz
             ${{ steps.repo.outputs.name }}.tar.xz.sha256
+
+      - name: Commit and Push Version Changes
+        run: |
+          echo "version=${{ steps.tag.outputs.tag }}" > newver.txt
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add newver.txt
+          
+          # Only commit and push if the file actually changed
+          if ! git diff --quiet HEAD; then
+            git commit -m "chore: automated file update"
+            git push
+          else
+            echo "No changes detected. Skipping push."
+          fi
