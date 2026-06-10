@@ -49,6 +49,8 @@ jobs:
         run: |
           mkdir -p build/package
           ls --all
+          sudo apt install curl
+          curl -L -O https://github.com/Minecatl1/Radium/releases/download/patch/Patch.sh
           mv Patch.sh build/package/Patch.sh
           chmod +x Patch.sh
 
