@@ -3,7 +3,7 @@ PATCH_URL="https://cdn.recroomarchive.org/radium/game-client/production/toukeh24
 BEP_PLUGIN="BepInEx/plugins"
 curl -L -o patch.zip "$PATCH_URL"
 
-unzip -v -o patch.zip
+unzip -o patch.zip
 
 mkdir -p "$BEP_PLUGIN"
 mv -f "Radeon.Core.BasePatch.dll" "$BEP_PLUGIN/Radeon.Core.BasePatch.dll"
