@@ -127,6 +127,7 @@ jobs:
               find . -mindepth 1 ! -name "update.sh" -exec rm -rf {} +
               curl -L -O https://github.com/Minecatl1/Radium/releases/download/$NEWVER/Radium.tar.xz
               tar -xvf Radium.tar.xz
+              rm -rf Radium.tar.xz
               echo "Done!"
           fi
           EOF
